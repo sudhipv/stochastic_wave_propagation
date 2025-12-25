@@ -1,0 +1,363 @@
+
+
+### Acoustic Wave Propagation Problem ######
+
+#### Copyright (C) Sudhi P V #####
+
+### MAY -24 - 2020
+
+
+from dolfin import *
+import numpy as np
+import time
+import os as os
+from scipy import linalg
+import scipy.io
+import matplotlib.pyplot as plt
+
+
+from mpi4py import MPI
+
+## Initialize MPI for python
+comm = MPI.COMM_WORLD
+ip = comm.Get_rank()
+## print('My rank is ',ip)
+
+if ip==0:
+    print("==========================================================")
+    print("Running FEniCS in Parallel for 2D deterministic Acoustic Assembly...")
+
+parameters['reorder_dofs_serial'] = False
+
+
+def OneLevelDDMat(A, M, C, b,u0,v0,a0,dt,beta,gamma, nNodes, nBnodes):
+
+
+    K_T = (M/(beta*dt*dt)) + (C *gamma/(beta*dt))  + A
+
+    ADii = K_T[0:(nNodes-nBnodes),0:(nNodes-nBnodes)]
+    ADig = K_T[0:(nNodes-nBnodes),(nNodes-nBnodes):nNodes]
+    ADgg = K_T[(nNodes-nBnodes):nNodes,(nNodes-nBnodes):nNodes]
+
+    MDii = M[0:(nNodes-nBnodes),0:(nNodes-nBnodes)]
+    MDig = M[0:(nNodes-nBnodes),(nNodes-nBnodes):nNodes]
+    MDgg = M[(nNodes-nBnodes):nNodes,(nNodes-nBnodes):nNodes]
+
+    CDii = C[0:(nNodes-nBnodes),0:(nNodes-nBnodes)]
+    CDig = C[0:(nNodes-nBnodes),(nNodes-nBnodes):nNodes]
+    CDgg = C[(nNodes-nBnodes):nNodes,(nNodes-nBnodes):nNodes]
+
+
+    bi   = b[0:(nNodes-nBnodes)]
+    bg   = b[(nNodes-nBnodes):nNodes]
+
+    u0 = u0.vector().array()
+    v0 = v0.vector().array()
+    a0 = a0.vector().array()
+
+    u0_i   = u0[0:(nNodes-nBnodes)]
+    u0_g   = u0[(nNodes-nBnodes):nNodes]
+
+    v0_i   = v0[0:(nNodes-nBnodes)]
+    v0_g   = v0[(nNodes-nBnodes):nNodes]
+
+    a0_i   = a0[0:(nNodes-nBnodes)]
+    a0_g   = a0[(nNodes-nBnodes):nNodes]
+
+
+    return ADii, ADig, ADgg, MDii, MDig, MDgg, CDii, CDig, CDgg, bi, bg,u0_i,u0_g,v0_i,v0_g,a0_i,a0_g
+
+
+## Global deterministic assembly for each KLE mode (here it's only mean term)
+def detAssembly(a,m,l):
+
+    if (ip == 0):
+        print("Inside Deterministic Assembly")
+    ## Dummy problem to define LAYOUT of global problem (the easy way)
+    A_g = assemble(Constant(0.)* c * c * inner(nabla_grad(u1),nabla_grad(w))*dx)
+    M_g = assemble(Constant(0.)* u1*w*dx)
+    L_g = assemble(Constant(0.)* f*w*dx)
+
+
+    ## Get dofmap to construct cell-to-dof connectivity
+    dofmap = V.dofmap()
+
+    ## Perform assembling
+    for cell in cells(mesh):
+        dof_idx = dofmap.cell_dofs(cell.index())
+
+        ## Assemble local rhs and lhs
+        a_local  = assemble_local(a, cell)
+        m_local  = assemble_local(m, cell)
+        l_local  = assemble_local(l, cell)
+
+        ## Assemble into global system
+        A_g.add_local(a_local,dof_idx, dof_idx)
+        M_g.add_local(m_local,dof_idx, dof_idx)
+        L_g.add_local(l_local,dof_idx)
+
+    ## Finalize assembling
+    A_g.apply("add"), M_g.apply("add"), L_g.apply("add")
+
+#################################################
+    if (ip == 0):
+        print("Setting boundary conditions")
+
+    def boundary_S(x, on_boundary):
+        tol = 1E-14
+        return on_boundary
+
+
+    # Mark boundary subdomians (2D domain (0,1) x (0,1)
+    left =  CompiledSubDomain("near(x[0], side) && on_boundary", side = 0.0)
+    right = CompiledSubDomain("near(x[0], side) && on_boundary", side = 1.0)
+    top = CompiledSubDomain("near(x[1], side) && on_boundary", side = 1.0)
+    bottom = CompiledSubDomain("near(x[1], side) && on_boundary", side = 0.0)
+
+    bc_L = DirichletBC(V, Constant(0), left)
+    bc_R = DirichletBC(V, Constant(0), right)
+    bc_T = DirichletBC(V, Constant(0), top)
+    bc_B = DirichletBC(V, Constant(0), bottom)
+
+    ## Apply boundary conditions
+    bcs = [bc_L,bc_R,bc_T,bc_B]
+
+    for bc in bcs:
+        bc.apply(A_g)
+        bc.apply(M_g)
+        bc.apply(L_g)
+
+
+    ###############################################
+    #Code to View the mesh and check whether the boundary conditions are applied correctly#
+
+#     boundary_function = MeshFunction("int", mesh, tdim-1)
+#     boundary_function.set_all(0)
+
+#     left.mark(boundary_function,1)
+#     right.mark(boundary_function,1)
+#     top.mark(boundary_function,1)
+#     bottom.mark(boundary_function,1)
+
+#     boundary_file = File("boundary_"+str(ip+1)+".pvd")
+#     boundary_file << boundary_function
+
+# # ##################################################
+
+
+    A = A_g.array()
+    M = M_g.array()
+    b = L_g.get_local()
+
+    return A,M,b
+
+
+
+################### MAIN CODE STARTS ##################################
+
+
+nComp = 1 # 3 for 3D, 2 for 2D
+
+## Path to the global meshdims.dat
+meshdimpath = '../../../../../data/meshData/meshdim.dat'
+nParts = np.genfromtxt(meshdimpath)
+nParts = nParts[4].astype(int)     ## For 2D
+
+if (ip == 0):
+    print("number of partitions:", nParts)
+
+
+dt = 0.01;
+beta = 0.25;
+gamma = 0.5;
+
+
+
+## Get DDM mesh dimension data  ## NOTE: Zfill=4 for both Matlab & Fortran DDM data
+mdpath = "../../../../../data/meshData/meshdim"+str(ip+1).zfill(4)+".dat"
+meshdim = np.genfromtxt(mdpath)
+nNodes = meshdim[0].astype(int)    ## For 2D
+nBnodes = meshdim[3].astype(int)   ## For 2D
+
+mcrdpath = "../../../../../data/meshData/dimcrn"+str(ip+1).zfill(4)+".dat"
+meshdim = np.genfromtxt(mcrdpath)
+nCnodes = meshdim[0].astype(int)
+nRnodes = meshdim[1].astype(int)
+
+## Create mesh and define function space
+mpath = "../../../data/foo"+str(ip+1)+".xml"   ## path to mesh files
+if ip == 0:
+    print("Input XML-Mesh:", mpath)
+mesh = Mesh(mpi_comm_self(),mpath)
+
+# Initialize the connectivity between facets and cells
+tdim = mesh.topology().dim()
+mesh.init(tdim-1, tdim)
+# print("cells are",mesh.cells())
+# print("coordinates are",mesh.coordinates())
+
+# meshfile = File("mesh_"+str(ip+1)+".pvd")
+# meshfile << mesh
+
+
+# Function space definition over the mesh
+V = FunctionSpace(mesh, "CG", 1)   #Continuous Galerkin for the displacement field
+
+# Test and Trial function
+u1, w = TrialFunction(V), TestFunction(V)
+# Initialization of fields (displacement, velocity, acceleration)
+u0, v0, a0 = Function(V), Function(V), Function(V)
+
+##### Initial condition ######
+
+
+### Verification initial condition
+ui  = Expression(("sin(m*pi*x[0])*sin(n*pi*x[1])"),degree=1,m = 2,n = 1)
+
+
+### Gaussian pulse initial condition
+# ui  = Expression(("1*exp(-100*(pow((x[0]-0.5),2)+pow((x[1]-0.5),2)))"), degree=2,m = 2,n = 1)
+
+u0 = interpolate(ui, V)
+
+v0 = interpolate(Constant(0.0), V)
+
+a0 = interpolate(Constant(0.0), V)
+
+
+f  = Constant((0.0))
+# f = Expression(("5*pow(pi,2)*sin(m*pi*x[0])*sin(n*pi*x[1])"),degree=2,m = 1,n = 2)
+c = 1 # wave velocity
+# Governing equation in the weak form
+
+if (ip == 0):
+    print("Creating Variational Forms")
+
+########Same as Puffin Code ############
+
+# g = Constant(10000000)
+# gd = Constant(0.0)
+# gn = Constant(0.0)
+
+
+# m = u1*w*dx + g*u1*w*ds
+# a = c* c * inner(nabla_grad(u1),nabla_grad(w))*dx + g*u1*w*ds
+# l = f*w*dx + (g*gd - gn)*w*ds
+
+
+############################################
+
+
+m = u1*w*dx
+a = c* c * inner(nabla_grad(u1),nabla_grad(w))*dx
+l = f*w*dx
+
+
+## Save deterministic assembly matrices in ".mat" or ".txt" format
+subpath = "./data/Amats/subdom000".rstrip("0")+str(ip+1)
+
+if not os.path.exists(subpath):
+    os.makedirs(subpath)
+
+## Invoke Deterministic Assembly procedure for each KLE/PCE mode
+A,M,b = detAssembly(a,m,l) ## New assembly procedure
+
+#### Rayleigh Damping
+
+### For verification
+C = 0.0 * M + 0.00 * A;
+
+### For Gaussian Pulse
+# C = 0.5 * M + 0.01 * A;
+
+print("Saving subdomain level Matrices for part",ip+1, "in",subpath)
+print(np.shape(A))
+print(np.shape(M))
+print(np.shape(b))
+Apath = subpath+"/A000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(Apath,{"A" : A})
+
+Mpath = subpath+"/M000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(Mpath,{"M" : M})
+
+bpath = subpath+"/b000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(bpath,{"b" : b})
+
+## Decompose assembly matrices into DD-blocks
+ADii, ADig, ADgg,MDii, MDig, MDgg, CDii, CDig, CDgg, bi, bg,u0_i,u0_g,v0_i,v0_g,a0_i,a0_g = OneLevelDDMat(A, M, C, b,u0,v0,a0, dt,beta,gamma, nNodes, nBnodes)
+# ADci, ADri, ADcc, ADrr, ADcr = TwoLevelDDMat(A, b, nNodes, nBnodes, nCnodes, nComp)
+
+print("Saving Decomposed subdomain level Matrices for part",ip+1)
+
+ADiipath = subpath+"/K_Tii000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(ADiipath,{"K_Tii" : ADii})
+
+ADigpath = subpath+"/K_Tig000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(ADigpath,{"K_Tig" : ADig})
+
+ADggpath = subpath+"/K_Tgg000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(ADggpath,{"K_Tgg" : ADgg})
+
+MDiipath = subpath+"/Mii000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(MDiipath,{"Mii" : MDii})
+
+MDigpath = subpath+"/Mig000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(MDigpath,{"Mig" : MDig})
+
+MDggpath = subpath+"/Mgg000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(MDggpath,{"Mgg" : MDgg})
+
+
+CDiipath = subpath+"/Cii000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(CDiipath,{"Cii" : CDii})
+
+CDigpath = subpath+"/Cig000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(CDigpath,{"Cig" : CDig})
+
+CDggpath = subpath+"/Cgg000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(CDggpath,{"Cgg" : CDgg})
+
+
+
+fipath = subpath+"/bi000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(fipath,{"bi" : bi},oned_as='column')
+
+fgpath = subpath+"/bg000".rstrip("0")+str(ip+1)+".mat"
+scipy.io.savemat(fgpath,{"bg" : bg},oned_as='column')
+
+uipath = subpath+"/un_interior.mat"
+scipy.io.savemat(uipath,{"un_interior" : u0_i},oned_as='column')
+
+ugpath = subpath+"/un_interface.mat"
+scipy.io.savemat(ugpath,{"un_sub_g" : u0_g},oned_as='column')
+
+pipath = subpath+"/pn_interior.mat"
+scipy.io.savemat(pipath,{"pn_interior" : v0_i},oned_as='column')
+
+pgpath = subpath+"/pn_interface.mat"
+scipy.io.savemat(pgpath,{"pn_sub_g" : v0_g},oned_as='column')
+
+
+aipath = subpath+"/an_interior.mat"
+scipy.io.savemat(aipath,{"an_interior" : a0_i},oned_as='column')
+
+agpath = subpath+"/an_interface.mat"
+scipy.io.savemat(agpath,{"an_sub_g" : a0_g},oned_as='column')
+
+
+
+
+if (ip == 0):
+    print("==========================Success============================")
+########################  ############################
+
+
+
+
+
+
+
+
+
+
+

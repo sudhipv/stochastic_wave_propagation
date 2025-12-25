@@ -1,0 +1,407 @@
+##### Errors found while installing and the solution links from internet #####
+
+NOTE: THESE ARE NOT THE EXACT SOLUTIONS TO ANY PROBLEMS MENTIONED HERE AND MAY OR MAYN'T SOLVE YOUR PROBLEM. THESE SHOULD BE TRIED OUT ONLY AFTER PRELIMINARY DEBUGGING AND TRIAL AND ERRORS FOR THE PROBLEM.
+ONE SHOULD CONTACT support@computecanada.ca REGARDING THE ERROR AND EVEN AFTER THEIR RESPONSE YOU WERE NOT ABLE TO SOLVE THE ISSUE, THEN YOU CAN TRY THESE OUT.
+
+###########################################################
+
+1. CMake Error at dolfin/CMakeLists.txt:60 (add_library):
+  Target "dolfin" links to target "Boost::program_options" but the target was
+  not found.  Perhaps a find_package() call is missing for an IMPORTED
+  target, or an ALIAS target is missing?
+
+sol : https://groups.google.com/forum/#!searchin/fenics-support/cmake$20boost|sort:date/fenics-support/SBHRa1fCG14/rLxH3lzTBgAJ
+
+update :  Not working. Gives new error -
+CMake Error at cmake/modules/FindBoost.cmake:7:
+  Parse error.  Expected a command name, got unquoted argument with text
+  "<!DOCTYPE".
+Call Stack (most recent call first):
+  CMakeLists.txt:313 (find_package)
+
+Answer : UPDATE CMAKE TO VERSION HIGHER THAN 11.0
+
+#################################################################
+
+2. import mesh as ms not recognized. FENICS not able to be run in parallel.
+
+For CEDAR and GRAHAM
+Traceback (most recent call last):
+  File "gmshData_fenicsXML_parallel_3D.py", line 20, in <module>
+    import meshio as ms                    ## pip3 install meshio
+  File "/home/sudhipv/fenics_17_1/lib/python3.5/site-packages/meshio/__init__.py", line 33, in <module>
+    print(pipdate.check(__name__, __version__), end="")
+  File "/home/sudhipv/fenics_17_1/lib/python3.5/site-packages/pipdate/main.py", line 105, in check
+    _log_time(name, datetime.now())
+  File "/home/sudhipv/fenics_17_1/lib/python3.5/site-packages/pipdate/main.py", line 61, in _log_time
+    d = json.load(handle)
+
+
+Answer : Go to the particular file in meshio and comment out the line in __init__.py file causing error (complete else statement)
+
+#####################################################################
+
+3. MPI4PY not working for Niagara or Beluga
+
+Answer : Niagara :
+
+Try installing FEniCS with intel, intel-mpi and intelpython modules inside NiaEnv
+
+Beluga :
+
+Install fenics the same way as it is installed in CEDAR, loading same modules and compilers.
+
+################################################################
+
+4. OSError: [Errno 30] Read-only file system: '/home/a/asarkar/sudhipv/packages/fenics_intel/.cache'
+
+Answer : $HOME directory is read only. Try running the code once in login node first to create a cache directory and then try in compute nodes.
+
+##################################################################
+
+5. KNOWN ERROR : while fenics assembly code :
+
+Local abort after MPI_FINALIZE started completed successfully, bu
+t am not able to aggregate error messages, and not able to guarantee that all ot
+her processes were killed!
+*** The MPI_Comm_rank() function was called after MPI_FINALIZE was invoked.
+*** This is disallowed by the MPI standard.
+
+
+Answer : Not sure why this happens. It happens after successful creation of matrices and saving them so left untouched.
+
+#############################################################################
+
+6. KNOWN ERROR:
+
+A process has executed an operation involving a call to the
+"fork()" system call to create a child process.  Open MPI is currently
+operating in a condition that could result in memory corruption or
+other system errors; your job may hang, crash, or produce silent
+data corruption.  The use of fork() (or system() or other calls that
+create child processes) is strongly discouraged.
+
+The process that invoked fork was:
+
+  Local host:          [[45870,1],307] (PID 27269)
+
+If you are *absolutely sure* that your application will successfully
+and correctly survive a call to fork(), you may disable this warning
+by setting the mpi_warn_on_fork MCA parameter to 0.
+--------------------------------------------------------------------------
+
+
+Answer : Error appears every time and doesn't interfere with the successful running of code. Left untouched.
+
+
+############################################################################
+
+7. KNOWN ERROR : sys.c:619  UCX  ERROR shmget(size=4263936 flags=0x7b0) for mm_recv_de
+sc failed: No space left on device, please check shared memory limits by 'ipcs -l'
+
+
+Possible Solution :
+
+NIAGARA and BELUGA
+
+This may be related to an internal shared memory problem in the version
+of UCX used with Openmpi.    Can you try with the following,
+
+mpiexec -np 2 --mca pml ob1
+
+Also if you use the Niagara software stack you can try it using IntelMPI
+which does not use UCX to see if that makes any difference.
+
+module load intel/2019u3  intelmpi/2019u3 petsc
+
+
+GRAHAM and CEDAR
+
+On Graham they have an earlier generation of Infiniband so the underlying
+communication libraries are a bit different.  Also it appears you switched to
+OpenMPI V2 vs V3.  Is there a reason you switched to the earlier version of
+OpenMPI?
+
+Try using
+
+mpirun --mca mtl ^mxm  ./a.out
+
+or
+
+mpirun --mca btl openib ./a.out
+
+The compiler is not the issue, its the underlying communications libraries that
+MPI is using.  You are trying to send very large messages and some of the
+protocols do not support that large of a message as they are tuned for higher
+rate smaller messages.    The communications protocols used by MPI are specific
+to the local systems interconnect so is highly recommended to stick to the
+system provided ones.  If you run "ompi_info -a" you will see all the various
+options available, however determining which non-default ones to use is not a
+straightfoward task.
+
+############################################################################
+
+8. KNOWN ERROR : Too many open files
+
+
+This error occurs when you have high mesh density (fine mesh) which leads to so many files being opened. The limit for file opening can be found as
+
+ulimit -a
+
+
+
+
+To change the limit
+
+ulimit -n 50000
+
+if you dont have root access to change it, we may have to look inside code to edit the way of present I/O.
+
+Else reduce the number of processes used for running the code.
+
+
+
+At line 100 of file preprocmesh3D2_AD.F90 (unit = 1031)
+Fortran runtime error: Cannot open file 'bnodestemp1021.dat': Too many open files
+
+
+
+#############################################################################
+
+
+FOR OBTAINING DETAILED INFORMATION ABOUT MEMORY (VIRTUAL- MAXVM AND RAM- MAXRSS)
+
+sacct -u sudhipv -S '2020-08-10' --format jobid%15,jobname%30,maxvmsize,MaxRSS
+
+
+
+sacct -u sudhipv -S '12
+          JobID                        JobName  MaxVMSize     MaxRSS
+--------------- ------------------------------ ---------- ----------
+       37286761                  run_fenics.sh
+ 37286761.batch                          batch  39353956K   4604480K
+37286761.extern                         extern    174024K       225K
+     37286761.0                          orted    309628K     23776K
+     37286761.1                          orted    309628K     23772K
+     37286761.2                          orted    309628K       957K
+     37286761.3                          orted  38868092K   4596874K
+       37298215       2AS_7RV_13KNodes_64Parts
+ 37298215.batch                          batch 246030616K 222899697K
+37298215.extern                         extern    174024K       198K
+     37298215.0                          orted 246385624K 223962417K
+       37300367                  run_fenics.sh
+ 37300367.batch                          batch  39430032K   4615133K
+37300367.extern                         extern    174024K       225K
+     37300367.0                          orted    309628K       959K
+     37300367.1                          orted    309628K     23768K
+     37300367.2                          orted    309628K       950K
+     37300367.3                          orted  38877252K   4608292K
+       37301915 2AS_4thKLE_5RV_13KNodes_64Par+
+ 37301915.batch                          batch 411745332K 387676357K
+37301915.extern                         extern    174024K       199K
+     37301915.0                          orted 411074240K 387803645K
+       37312428                  run_fenics.sh
+ 37312428.batch                          batch  39546164K   4585187K
+37312428.extern                         extern    174024K       220K
+     37312428.0                          orted    309628K       955K
+     37312428.1                          orted    309628K     23776K
+     37312428.2                          orted    309628K       950K
+     37312428.3                          orted  38859900K   4571663K
+       37313042      2AS_7RV_13KNodes_128Parts
+       37313237      2AS_7RV_13KNodes_128Parts
+ 37313237.batch                          batch 133305616K 109198691K
+37313237.extern                         extern    174024K       133K
+     37313237.0                          orted 132810796K 110038877K
+       37317323                  run_fenics.sh
+ 37317323.batch                          batch  39480656K   4584540K
+37317323.extern                         extern    174024K       262K
+     37317323.0                          orted    309628K       971K
+     37317323.1                          orted    309628K     23776K
+     37317323.2                          orted  19911996K   3209413K
+     37317323.3                          orted  38860772K   4569539K
+       37319399      2AS_7RV_13KNodes_256Parts
+       37319464      2AS_7RV_13KNodes_256Parts
+ 37319464.batch                          batch  76809392K  53175932K
+37319464.extern                         extern    174024K       254K
+     37319464.0                          orted  76248612K  53741404K
+       37323222                  run_fenics.sh
+ 37323222.batch                          batch  39748912K   4577832K
+37323222.extern                         extern    174028K       262K
+     37323222.0                          orted    309628K       981K
+     37323222.1                          orted    309628K     23776K
+     37323222.2                          orted    309628K       983K
+     37323222.3                          orted  38862700K   4583083K
+       37324529      2AS_7RV_13KNodes_512Parts
+ 37324529.batch                          batch  51420132K  27787020K
+37324529.extern                         extern    174028K       243K
+     37324529.0                          orted  49626108K  27617405K
+       37325724                  run_fenics.sh
+ 37325724.batch                          batch  39753012K   4590457K
+37325724.extern                         extern    174028K       241K
+     37325724.0                          orted    309636K     23772K
+     37325724.1                          orted    309628K     23776K
+     37325724.2                          orted    309628K       964K
+     37325724.3                          orted  38866596K   4587358K
+       37329950     2AS_7RV_13KNodes_1024Parts
+ 37329950.batch                          batch  39357860K  15341866K
+37329950.extern                         extern    174028K       256K
+     37329950.0                          orted  38611800K  15484752K
+       37346562                  run_fenics.sh
+ 37346562.batch                          batch  40700004K   4586310K
+37346562.extern                         extern    174028K       244K
+     37346562.0                          orted    309628K       966K
+     37346562.1                          orted    309628K     23776K
+     37346562.2                          orted  19616144K   2680801K
+     37346562.3                          orted  39880856K   4820646K
+       37356426      2AS_7RV_13KNodes_720Parts
+ 37356426.batch                          batch  44404488K  19869455K
+37356426.extern                         extern    174028K       243K
+     37356426.0                          orted  44004420K  20341564K
+       37363019                  run_fenics.sh
+       37363046                  run_fenics.sh
+ 37363046.batch                          batch  39277188K   4870627K
+37363046.extern                         extern    174024K       227K
+       37364225       2AS_7RV_13KNodes_32Parts
+ 37364225.batch                          batch 347924632K 324798486K
+37364225.extern                         extern    174024K       128K
+       37366329       2AS_7RV_13KNodes_32Parts
+ 37366329.batch                          batch 477775460K 454067928K
+37366329.extern                         extern    174024K       128K
+
+
+MaxRSS -  Maximum individual resident set size of all resident set sizes
+associated with the tasks in job.
+
+Values are reported in KB kilo Bytes , for ONE NODE
+
+%%% MaxVM virtual memory ..actually needed to run code
+
+%%% maxRSS gives the actual RAM used by code
+
+
+https://slurm.schedmd.com/sstat.html
+
+
+#############################################
+
+
+9. not enough allocation for nodes in preprocmesh2.f
+
+This error comes from the preprocemesh3D2_AD.F90 or preprocemesh2_AD.F90 because of less allocated memory for the varibles to manipulate nodes.
+
+This allocation is done using a thumb rule as shown below,
+
+
+nodes(floor(2.0d0*dble(np)/dble(ndom) + 10.0d0))
+
+Here the value 2 can be changed to 5 or more accordingly in case of error. Mostly when the number of subdomains increases.
+
+! Changed to 5 by sudhi since gives error with some parameters because of less allocated memory
+allocate(bnodes(nb),points(3,np),node_renum(np),)
+
+
+
+
+#############################################
+
+
+10 .  At line 612 of file preprocmesh2_AD.F90 (unit = 2, file = 'rnodes0575.dat')
+Fortran runtime error: End of file
+
+
+This error comes because the remaining nodes are zero and thus the file is empty. Either we have to increase the mesh or decrease the number of subdomains to have atleast 1 remaining nodes per subdomain.
+
+For the successfull running of code it is not necessary to have remaining nodes in every subdomain.
+
+Make the code work even without any remaining nodes. Pass the check even if file is empty.
+
+
+
+#############################################
+
+ERROR:11
+
+ImportError: libimf.so: cannot open shared object file: No such file or directory
+
+
+
+
+#############################################
+
+ERROR:12. Fenics- mpi code fails in niagara
+
+nia0116.scinet.local:UCM:4887d:23a13700: 584575 us(584575 us!!!):  ucm_recv: UNKNOWN
+msg 0x558a3ade82a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 1385574 us(800999 us!!!):  ucm_recv: UNKNOWN
+msg 0x558a3ade83a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 1385659 us(85 us):  ucm_recv: UNKNOWN msg
+0x558a3ade84a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 2188241 us(802582 us!!!):  ucm_recv: UNKNOWN
+msg 0x558a3ade85a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 3793611 us(1605370 us!!!):  ucm_recv: UNKNOWN
+msg 0x558a3ade86a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 7003045 us(3209434 us!!!):  ucm_recv: UNKNOWN
+msg 0x558a3ade87a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 13423654 us(6420609 us!!!):  ucm_recv:
+UNKNOWN msg 0x558a3ade88a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 26265495 us(12841841 us!!!):  ucm_recv:
+UNKNOWN msg 0x558a3ade89a8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 51945118 us(25679623 us!!!):  ucm_recv:
+UNKNOWN msg 0x558a3ade8aa8, ver 0
+nia0116.scinet.local:UCM:4887d:23a13700: 103105638 us(51160520 us!!!):  ucm_recv:
+UNKNOWN msg 0x558a3ade8ba8, ver 0
+nia1044.scinet.local:UCM:f9c6:c7f70700: 205457544 us(205457544 us!!!):  CM_REPLY:
+RETRIES EXHAUSTED (lid port qpn) 52a f9c6 e203 -> 21b 2 11f64
+[160:nia1044] unexpected DAPL connection event 0x4006 from 0
+
+
+
+
+Solution :
+
+
+HI Sudhi,
+
+Here are two possible workarounds to use with the mpirun command in your job script.  The idea is to avoid the problems that show up with “DAPL”,
+which is a particular transport that the old intelmpi/2018.2 uses.  Please try one, or the other, and let us know if things work:
+
+
+mpirun -genv I_MPI_FABRICS=shm:dapl -genv I_MPI_DAPL_UD=1 -genv I_MPI_DAPL_UD_RDMA_MIXED=1
+
+or
+
+mpirun -genv I_MPI_FABRICS=shm:ofa
+
+
+These options are in addition to the others in the mpirun commands.  For example, in your script you would use:
+
+mpirun  -genv I_MPI_FABRICS=shm:ofa  -n 240 python -m mpi4py  gmshData_fenicsXML_parallel_3D.py
+
+and:
+
+mpirun -genv I_MPI_FABRICS=shm:ofa  -n 240 python elasticity3D_stochasticDDM_parallel_twolevel.py
+
+
+Or you can try the first set of options.  Performance may vary, and the first set may work better, but it depends on the code.
+Note that I changed “mpiexec” for “mpirun” in both lines.
+
+
+
+
+
+#############################################
+
+
+
+#############################################
+forrtl: severe (24): end-of-file during read, unit 1, file /gpfs/fs0/scratch/a/asarkar/sudhipv/ssfem_wave/src/3Delasticwave_stoDDM/../../external/dolfin/data/Amats/subdom4/ADii2.dat
+
+
+
+
+The file is empty. The number of processes are too large for the mesh that there are no interior nodes (in this case)
+
+#############################################
+
+
+

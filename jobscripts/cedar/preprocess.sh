@@ -1,0 +1,58 @@
+## KLE/PCE data
+#module load gcc
+
+module --force purge --all
+module load StdEnv/2018
+echo "KLE/PCE Data: "
+cd ../../data/klePceData/
+gfortran KLE_PCE_Data_commandLineArg.F90
+./a.out
+cd -
+
+## GMSH/DDM data
+cd ../../data/meshData/
+
+echo "GMSH: Select one of the following options: "
+echo " 1 for 2D-mesh "
+echo " 2 for 3D-mesh "
+echo " 3 for 3D-mesh- Elastic wave"
+
+read input1
+
+if [ $input1 == 1 ]
+then
+    echo "GMSH: 2D-mesh Selected"
+    cp geofiles/fooServer2D.geo foo.geo
+    cp jobscritps/generate_data_2D.sh generate_data.sh
+elif [ $input1 == 2 ]
+then
+    echo "GMSH: 3D-mesh Selected"
+    cp geofiles/slenderBeam.geo foo.geo
+    cp jobscritps/generate_data_3D.sh generate_data.sh
+elif [ $input1 == 3 ]
+then
+    echo "GMSH: 3D-mesh elastic wave Selected"
+    cp geofiles/soil.geo foo.geo
+    cp jobscritps/generate_data_3D.sh generate_data.sh
+else
+    echo "STOP: Wrong input"
+exit
+fi
+
+###*** 3D MESH :: submit a job to create mesh file and mesh decomposition data
+## change the lc parameter to control mesh desnity
+## first lc=current lc and second lc=desiredlc
+## for cluster use lc=0.01 with (0.2,0.2,1.0) and lc=0.05 with (1,1,5) for 30K
+sed -i -e 's/lc=0.1/lc=0.01/g' foo.geo ### for 3D elasticity or 2D
+### For elastic wave - soil medium
+sed -i -e 's/lc1=1/lc1=6/g' foo.geo # Bottom part of soil
+sed -i -e 's/lc2=1/lc2=6/g' foo.geo # Top part of soil
+sed -i -e 's/NP=32/NP=800/g' generate_data.sh
+## select wb=1 for wirebasket and wb=0 for vertex grid
+sed -i -e 's/wb=1/wb=0/g' preprocmesh3D2_AD.F90
+
+## Job submission method
+bash generate_data.sh
+#module unload gcc
+#sbatch generate_data_graham.sh
+cd -

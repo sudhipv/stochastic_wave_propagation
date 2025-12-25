@@ -1,0 +1,87 @@
+
+
+!!!!!!!!!!!!!!! PETSc Routines !!!!!!!!!!!!!!!!!!
+
+
+1. All PETSc Vec and Matrix indices start from 0.
+2. PETSc scalar array indices start from 1 itself
+3. Vec and Mat creation follows a sequence of steps in PETSc which have to be correctly followed else will show segmentation violation errors which is hard to debug.
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>
+1. VecGetValues
+
+Gets values from certain locations of a vector. Currently can only get values on the same processor
+Synopsis
+
+#include "petscvec.h"
+PetscErrorCode  VecGetValues(Vec x,PetscInt ni,const PetscInt ix[],PetscScalar y[])
+Not Collective
+Input Parameters
+x   - vector to get values from
+ni  - number of elements to get
+ix  - indices where to get them from (in global 1d numbering)
+Output Parameter
+y -array of values
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+2. VecSetValues
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+3. VecCreateSeq
+
+VecAssemblyBegin
+VecAssemblyEnd
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+4. MatCreateSeqAIJ
+   MatAssemblyBegin
+   MatAssemblyEnd
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+5. MatSetValues
+
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+6. MatMult
+
+Computes the matrix-vector product, y = Ax.
+Synopsis
+#include "petscmat.h"
+PetscErrorCode MatMult(Mat mat,Vec x,Vec y)
+Neighbor-wise Collective on Mat and Vec
+Input Parameters
+mat - the matrix
+x   - the vector to be multiplied
+Output Parameters
+y -the result
+Notes
+The vectors x and y cannot be the same. I.e., one cannot call MatMult(A,y,y).
+
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

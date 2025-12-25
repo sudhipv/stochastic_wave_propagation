@@ -1,0 +1,8 @@
+
+
+
+
+1. https://scicomp.stackexchange.com/questions/14429/applying-dirichlet-b-c-to-the-eigenvalue-problem
+
+
+2. https://bitbucket.org/fenics-project/dolfin/issues/805/dirichletbc-check_arguments-is-too-strict

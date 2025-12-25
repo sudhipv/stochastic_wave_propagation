@@ -1,0 +1,17 @@
+
+Documentation
+
+https://fenics.readthedocs.io/projects/containers/en/latest/introduction.html
+
+1 . naming, sharing local folder and pulling a container in one command
+
+---> docker run -ti -v $(pwd):/home/fenics/shared --name fenics-container quay.io/fenicsproject/stable:version number
+
+
+
+2. Test docker working correctly or not
+---> docker run hello-world
+
+Create alias
+
+alias fenics-work='docker start fenics-work && docker exec -ti -u fenics fenics-work /bin/bash -l'

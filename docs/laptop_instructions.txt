@@ -1,0 +1,16 @@
+
+Running code in laptop
+
+1. Go to data and run
+
+    source preprocessMac2D.sh
+
+
+2. Open your fenics in docker or whatever installation you did
+
+3. go to folder ssfem_wave/external/dolfin/src/wave
+
+4. run " mpiexec -n 8 python3 gmshData_fenicsXML_parallel_3D.py "
+
+5.
+

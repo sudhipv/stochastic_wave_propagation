@@ -1,0 +1,20 @@
+
+
+1. Run mesh decomposer as usual using files in the main data folder : preprocessMac2D.sh
+
+2. python preprocess_wave_MATLAB.py
+
+3. Start and activate fenics
+
+4. python3 acoustic_2D_DDM_MATLAB.py
+
+5. Run matlab code Acoustic_Solver_NEW.m
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,23 @@
+
+
+meshdim file description
+
+1. number of vertices - points - available in points.dat
+2. number of edges - avilable in edges.dat
+3. Numbe of triangles - available in triangles.dat
+4. Number of Tetrahedrons - available in tetrahedrons.dat
+5. Number of boundary nodes - nbgc.dat + nbgr.dat
+6. Number of partitions - available in num_partition.dat
+7. Number of tetrahedrons on boundary - tetrahedrons_on_boundary.dat
+
+
+################################################
+
+The way mesh is created is also important. The same mesh has to be used while comparing two algorithms such as VB and WB since remeshing might cause changes in vertex and corner nodes.
+
+If a 2D geometry is created and then extruded to get 3D geometry, the number of edges and triangles are counted only on the 2D geometry and only tetrahedrons are present in the .msh file.
+
+################################################
+
+The .msh file reading
+
