@@ -1,7 +1,9 @@
 # Scalable Solvers for Spectral Stochastic FEM : Acoustic Wave Propagation and 3D Elasticity 
 
-This solver have capabilities to solve SSFEM using Two level Domain decomposition based preconditioners for 3D linear elasticity (static) and acoustic wave propagtion in 2D.
-source code for steady diffusion/Poisson equation in 2D and 3D are also present but have to make script files for running.
+This solver have capabilities to solve SSFEM using Two level Domain decomposition based preconditioners for 2D acoustic wave and 3D elastic wave propagation. 
+
+<img width="1000" height="1000" alt="mean_30" src="https://github.com/user-attachments/assets/c411d668-98cd-4b96-8f6c-129a4349f54b" />
+<img width="1000" height="1000" alt="mean_60" src="https://github.com/user-attachments/assets/65d07d31-89d0-49e7-8e4a-d0033d6fdbbc" />
 
 
 ### Components
