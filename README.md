@@ -1,4 +1,4 @@
-# Scalable Solvers for Spectral Stochastic FEM : Acoustic Wave Propagation and 3D Elasticity 
+# Scalable Solvers for Spectral Stochastic FEM : Acoustic Wave Propagation and 3D Elastic Waves 
 
 This solver have capabilities to solve SSFEM using Two level Domain decomposition based preconditioners for 2D acoustic wave and 3D elastic wave propagation. 
 
